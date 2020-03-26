@@ -363,7 +363,7 @@ static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
     }
     debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
         pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5);
-    joyClientSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid);
+    // joyClientSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid);
     return 0;
 }
 
