@@ -109,7 +109,7 @@ int joyServerProcRecvData()
                     debug_msg("error: fail to accept, errno[%s].", strerror(errno));
                     continue;
                 }
-                debug_msg("debug: accept addr[%s], port[%d].", inet_ntoa(clientaddr.sin_addr), ntohs(clientaddr.sin_port));
+                debug_msg("debug: accept addr[%s], port[%d], fd[%d].", inet_ntoa(clientaddr.sin_addr), ntohs(clientaddr.sin_port), connfd);
                 if (0 != joynetSetNoBlocking(connfd)) {
                     debug_msg("error: fail to set fd no blocking.");
                     continue;
@@ -297,13 +297,15 @@ int joyServerSendData(const char *buf, int len, int srcid, int dstid)
     return 0;
 }
 
+long int totalrecvlen;
 static int serverRecvCallBack(char *buf, struct JoynetHead *pkghead)
 {
     if (NULL == buf || NULL == pkghead) {
         debug_msg("error: invalid param, buf[%p], pkghead[%p]", buf, pkghead);
         return -1;
     }
-    debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
+    totalrecvlen += pkghead->bodylen;
+    // debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
         pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5);
     joyServerSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid);
     return 0;
@@ -314,8 +316,16 @@ int main()
     if (0 != joyServerListen("0.0.0.0", 20000)) {
         return -1;
     }
+    time_t tick, now;
+    time(&tick);
     while (1) {
         joyServerRecvData(serverRecvCallBack);
+        joyServerProcSendData();
+        time(&now);
+        if (tick + 10 < now) {
+            tick = now;
+            debug_msg("total recv len[%ld].", totalrecvlen);
+        }
     }
     return 0;
 }

@@ -36,7 +36,7 @@ static int joyClientSetConnected_(int fd)
     }
     struct JoyConnectNode *node = joyClient.cpool.node + nodepos;
     node->status = kJoynetStatusConnected;
-    debug_msg("debug: set fd[%d] status to connected.", node->status);
+    debug_msg("debug: set fd[%d] status to connected.", node->cfd);
 
     struct JoynetHead pkghead = { 0 };
     pkghead.headlen = sizeof(pkghead);
@@ -202,7 +202,7 @@ int joyClientProcRecvData()
             }
         } else if(0 == rv) {
             // debug_msg("info: time out poll.");
-            return 0;
+            continue;
         } else {
             if (pfds[0].events & POLLIN) {
                 int rlen = joynetRecvBuf(node);
@@ -355,13 +355,15 @@ int joyClientSendData(const char *buf, int len, int srcid, int dstid)
     joyClientProcSendData();
 }
 
+long int totalrecvlen;
 static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
 {
     if (NULL == buf || NULL == pkghead) {
         debug_msg("error: invalid param, buf[%p], pkghead[%p]", buf, pkghead);
         return -1;
     }
-    debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
+    totalrecvlen += pkghead->bodylen;
+    // debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
         pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5);
     // joyClientSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid);
     return 0;
@@ -369,17 +371,53 @@ static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
 
 int main()
 {
+    /* 压测 */
     time_t tick, now;
     time(&tick);
-    char *test = "1234567890";
+    char *test = "1234567890qwertyuioplkjhgfdsazxcvbnm,.;?";
+    long int totallen = 0;
+    int nodecnt = 512;
+    int pkgcnt = 10;
+    //连接
+    for (int i = 0; i < nodecnt; ++i) {
+        joyClientConnectTcp("127.0.0.1", 20000, i);
+    }
     while (1) {
         time(&now);
-        if (now < tick + 1) { continue; }
+        if (now < tick + 1) {
+            continue;
+        }
         tick = now;
-
-        joyClientConnectTcp("127.0.0.1", 20000, 1);
-        joyClientRecvData(clientRecvCallBack);
-        joyClientSendData(test, strlen(test), 1, 1);
+        char allready = 1;
+        for (int i = 0; i < nodecnt; ++i) {
+            int nodepos = joynetGetConnectNodePosByID(&joyClient.cpool, i);
+            if (nodepos < 0 || joyClient.cpool.node[nodepos].status != kJoynetStatusConnected) {
+                joyClientConnectTcp("127.0.0.1", 20000, i);
+                allready = 0;
+            }
+        }
+        if (1 == allready) {
+            break;
+        }
     }
+    //发包
+    for (int i = 0; i < pkgcnt; ++i) {
+        for (int j = 0; j < nodecnt; ++j) {
+            int len = rand() % 39 + 1;
+            joyClientSendData(test, len, j, j);
+            joyClientRecvData(clientRecvCallBack);
+            totallen += len;
+        }
+    }
+    while(1){
+        joyClientProcSendData();
+        joyClientRecvData(clientRecvCallBack);
+        time(&now);
+        if (tick + 10 < now) {
+            tick = now;
+            break;
+        }
+    }
+    debug_msg("total send len[%ld], recv len[%ld]", totallen, totalrecvlen);
     return 0;
 }

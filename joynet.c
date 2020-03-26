@@ -137,7 +137,7 @@ int joynetSendBuf(struct JoyConnectNode* node)
         }
         sTotalLen += slen;
     }
-    debug_msg("debug: send msg len[%d].", sTotalLen);
+    // debug_msg("debug: send msg to fd[%d], len[%d].", node->cfd, sTotalLen);
     return sTotalLen;
 }
 
@@ -175,7 +175,7 @@ int joynetRecvBuf(struct JoyConnectNode* node)
         }
         rTotalLen += rlen;
     }
-    debug_msg("debug: recv msg len[%d].", rTotalLen);
+    // debug_msg("debug: recv msg from fd[%d], len[%d].", node->cfd, rTotalLen);
     return rTotalLen;
 }
 

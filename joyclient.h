@@ -4,7 +4,7 @@
 #include <poll.h>
 #include "joynet.h"
 
-#define kJoyClientPollTimeOut 5
+#define kJoyClientPollTimeOut 0
 #define kJoyClientConnectTimeOut 10
 #define kJoyClientSendBufSize 10 * 1024 * 1024   //10MB发送缓存
 #define kJoyClientRecvBufSize 10 * 1024 * 1024   //10MB接受缓存
