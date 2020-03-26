@@ -154,7 +154,7 @@ int joynetRecvBuf(struct JoyConnectNode* node)
     for (int i = 0; i < recvcnt; ++i) {
         int callen = 0;     //计算发送长度
         if (node->recvcq.tail < node->recvcq.head) {
-            callen = node->recvcq.tail - node->recvcq.head;
+            callen = node->recvcq.head - node->recvcq.tail;
         } else {
             callen = node->recvcq.size - node->recvcq.tail;
         }
@@ -187,10 +187,11 @@ int joynetWriteSendBuf(struct JoyConnectNode *node, const char *buf, int len)
     }
     if (cq->head < cq->tail) {
         if (cq->size - cq->tail < len) {
-            int firstlen = len - (cq->size - cq->tail);
+            int firstlen = cq->size - cq->tail;
             int secondlen = len - firstlen;
             memcpy(node->sendbuf + cq->tail, buf, firstlen);
             memcpy(node->sendbuf, buf + firstlen, secondlen);
+            debug_msg("warn: read separation data, [%d]-[%d], [%d]-[%d]", cq->tail, cq->size, 0, secondlen);
         } else {
             memcpy(node->sendbuf + cq->tail, buf, len);
         }
@@ -214,10 +215,11 @@ int joynetReadRecvBuf(struct JoyConnectNode *node, char *buf, int len)
     }
     if (cq->tail < cq->head) {
         if (cq->size - cq->head < len) {
-            int firstlen = len - (cq->size - cq->head);
+            int firstlen = cq->size - cq->head;
             int secondlen = len - firstlen;
             memcpy(buf, node->recvbuf + cq->head, firstlen);
             memcpy(buf + firstlen, node->recvbuf, secondlen);
+            debug_msg("warn: read separation data, [%d]-[%d], [%d]-[%d]", cq->head, cq->size, 0, secondlen);
         } else {
             memcpy(buf, node->recvbuf + cq->head, len);
         }
@@ -273,7 +275,6 @@ int joynetDelConnectNode(struct JoyConnectPool *cp, int cfd)
         free(cp->node[pos].recvbuf);
     }
     bzero(cp->node + pos, sizeof(struct JoyConnectNode));
-
     if (cp->nodes - 1 == pos) {
         //pass
     } else {

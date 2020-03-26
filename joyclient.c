@@ -168,6 +168,7 @@ int joyClientConnectTcp(const char *addr, int port, int procid)
 
 int joyClientCloseTcp(int fd)
 {
+    close(fd);
     debug_msg("debug: close fd[%d].", fd);
     if (0 != joynetDelConnectNode(&joyClient.cpool, fd)) {
         debug_msg("error: fail to del node, fd[%d].", fd);
