@@ -115,10 +115,13 @@ int joynetSendBuf(struct JoyConnectNode* node)
         return 0;
     }
     int sendcnt = node->sendcq.tail < node->sendcq.head ? 2 : 1;
+    if (node->sendcq.tail == node->sendcq.head) {
+        sendcnt = 0 == node->sendcq.head ? 1 : 2;
+    }
     int sTotalLen = 0;
-    for (int i = 0; i < sendcnt; ++i) {
-        int callen = 0;     //计算发送长度
-        if (node->sendcq.tail < node->sendcq.head) {
+    for (int i = 0; i < sendcnt && 0 < node->sendcq.cnt; ++i) {
+        int callen = 0;     //计算发送长度(考虑head==tail的情况)
+        if (node->sendcq.tail <= node->sendcq.head) {
             callen = node->sendcq.size - node->sendcq.head;
         } else {
             callen = node->sendcq.tail - node->sendcq.head;
@@ -150,9 +153,12 @@ int joynetRecvBuf(struct JoyConnectNode* node)
         return 0;
     }
     int recvcnt = node->recvcq.tail < node->recvcq.head ? 1 : 2;
+    if (node->recvcq.tail == node->recvcq.head) {
+        recvcnt = 0 == node->recvcq.tail ? 1 : 2;
+    }
     int rTotalLen = 0;
     for (int i = 0; i < recvcnt; ++i) {
-        int callen = 0;     //计算发送长度
+        int callen = 0;     //计算发送长度(考虑head==tail的情况)
         if (node->recvcq.tail < node->recvcq.head) {
             callen = node->recvcq.head - node->recvcq.tail;
         } else {
