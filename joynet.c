@@ -191,7 +191,7 @@ int joynetWriteSendBuf(struct JoyConnectNode *node, const char *buf, int len)
             int secondlen = len - firstlen;
             memcpy(node->sendbuf + cq->tail, buf, firstlen);
             memcpy(node->sendbuf, buf + firstlen, secondlen);
-            debug_msg("warn: read separation data, [%d]-[%d], [%d]-[%d]", cq->tail, cq->size, 0, secondlen);
+            debug_msg("warn: write separation data, [%d]-[%d], [%d]-[%d]", cq->tail, cq->size, 0, secondlen);
         } else {
             memcpy(node->sendbuf + cq->tail, buf, len);
         }
@@ -353,7 +353,7 @@ int joynetLeaveCycleQueue(struct JoyCycleQueue *cq, int len)
     }
     cq->head = (cq->head + len) % cq->size;
     cq->cnt -= len;
-    //特殊处理
+    //特殊处理(尽量保证数据不会出现在队列两头)
     if (0 == cq->cnt) {
         cq->head = 0;
         cq->tail = 0;
