@@ -177,7 +177,7 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
                 debug_msg("debug: shake hands success.");
                 if (0 < pkghead.bodylen) {
                     debug_msg("error: invalid shake pkg.");
-                    if (joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
+                    if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                         debug_msg("error: fail to leave recv queue.");
                         joyServerCloseTcp(node->cfd);
                     }
@@ -200,7 +200,7 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
                     } else {
                         char *body = node->recvbuf + cq->head;
                         recvCallBack(body, &pkghead);
-                        if (joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
+                        if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                             debug_msg("error: fail to leave recv queue.");
                             joyServerCloseTcp(node->cfd);
                         }

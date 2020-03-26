@@ -235,7 +235,7 @@ int joyClientRecvData(joyRecvCallBack recvCallBack)
                 debug_msg("debug: shake hands success.");
                 if (0 < pkghead.bodylen) {
                     debug_msg("error: invalid shake pkg.");
-                    if (joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
+                    if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                         debug_msg("error: fail to leave recv queue.");
                         joyClientCloseTcp(node->cfd);
                     }
@@ -258,7 +258,7 @@ int joyClientRecvData(joyRecvCallBack recvCallBack)
                     } else {
                         char *body = node->recvbuf + cq->head;
                         recvCallBack(body, &pkghead);
-                        if (joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
+                        if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                             debug_msg("error: fail to leave recv queue.");
                             joyClientCloseTcp(node->cfd);
                         }
@@ -319,12 +319,12 @@ int joyClientSendData(const char *buf, int len, int srcid, int dstid)
         return -1;
     }
 
-    // joyClientProcSendData();
-    // // 再次检查，可能在处理发送过程中发生错误，导致fd已关闭
-    // if (kJoynetStatusConnected != node->status) {
-    //     debug_msg("error: send to not connected id[%d].", dstid);
-    //     return -1;
-    // }
+    joyClientProcSendData();
+    // 再次检查，可能在处理发送过程中发生错误，导致fd已关闭
+    if (kJoynetStatusConnected != node->status) {
+        debug_msg("error: send to not connected id[%d].", dstid);
+        return -1;
+    }
 
     struct JoynetHead pkghead = { 0 };
     pkghead.headlen = sizeof(pkghead);
@@ -351,11 +351,7 @@ int joyClientSendData(const char *buf, int len, int srcid, int dstid)
         return -1;
     }
 
-    static int cnt = 0;
-    cnt++;
-    if (0 == cnt % 10) {
-        joyClientProcSendData();
-    }
+    joyClientProcSendData();
 }
 
 static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
