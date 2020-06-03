@@ -18,11 +18,16 @@ struct JoyClient {
 };
 
 int joyClientConnectTcp(const char *addr, int port, int procid);
-int joyClientCloseTcp(int fd);
+int joyClientIsReady(int procid);
+int joyClientCloseTcp(int procid);
 int joyClientProcRecvData();
-int joyServerRecvData(joyRecvCallBack recvCallBack);
+int joyClientRecvData(joyRecvCallBack recvCallBack);
 int joyClientProcSendData();
-int joyClientSendData(const char *buf, int len, int srcid, int dstid);
+int joyClientSendData(const char *buf, int len, int procid, int srcid, int dstid);
+
+// 为了兼容发送时只知道nid不知道procid的情况
+int joyClientSendDataByNid(const char *buf, int len, int procid, int srcid, int dstnid);
+int joyClientRegisterNid(int procid, int srcid, int nid);
 
 #ifdef __cplusplus
 }

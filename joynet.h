@@ -46,6 +46,7 @@ struct JoynetHead {
     int bodylen;
     int srcid;
     int dstid;
+    int dstnid;                             // 为了兼容发送时只知道nid不知道procid的情况
     int md5;
 };
 
@@ -80,6 +81,7 @@ int joynetWriteSendBuf(struct JoyConnectNode *node, const char *buf, int len);
 int joynetRecv(int fd, char *buf, int len, int to);
 int joynetRecvBuf(struct JoyConnectNode* node);
 int joynetReadRecvBuf(struct JoyConnectNode *node, char *buf, int len);
+int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int srcid, int dstid, int dstnid);
 
 
 //节点

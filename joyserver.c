@@ -5,12 +5,45 @@
 
 static struct JoyServer joyServer;
 
+static int joyServerCloseTcp_(int fd)
+{
+    if (0 == fd) {
+        debug_msg("error: invalid fd[%d].", fd);
+        return -1;
+    }
+
+    struct epoll_event ev = { 0 };
+    ev.data.fd = fd;
+    if (0 != epoll_ctl(joyServer.efd, EPOLL_CTL_DEL, fd, &ev)) {
+        debug_msg("fail to epoll_ctl(EPOLL_CTL_DEL), fd[%d], errno[%s]", fd, strerror(errno));
+    }
+
+    close(fd);
+    if (fd == joyServer.lfd) {
+        bzero(&joyServer, sizeof(joyServer));
+    } else {
+        if (0 != joynetDelConnectNode(&joyServer.cpool, fd)) {
+            debug_msg("error: fail to del node, fd[%d].", fd);
+        }
+    }
+    return 0;
+}
+
+int joyServerCloseTcp()
+{
+    for (int i = 0; i < joyServer.cpool.nodes; ++i) {
+        struct JoyConnectNode *node = joyServer.cpool.node + i;
+        joyServerCloseTcp_(node->cfd);
+    }
+    return 0;
+}
+
 int joyServerListen(const char *addr, int port)
 {
     debug_msg("debug: listen tcp.");
     if (0 != joyServer.lfd) {
         debug_msg("warn: joyServer.lfd[%d] not equal to 0.", joyServer.lfd);
-        joyServerCloseTcp(joyServer.lfd);
+        joyServerCloseTcp_(joyServer.lfd);
     }
     debug_msg("debug: startting listen tcp.");
 
@@ -60,39 +93,17 @@ int joyServerListen(const char *addr, int port)
     return 0;
 }
 
-int joyServerCloseTcp(int fd)
-{
-    if (0 == fd) {
-        debug_msg("error: invalid fd[%d].", fd);
-        return -1;
-    }
-
-    struct epoll_event ev = { 0 };
-    ev.data.fd = fd;
-    if (0 != epoll_ctl(joyServer.efd, EPOLL_CTL_DEL, fd, &ev)) {
-        debug_msg("fail to epoll_ctl(EPOLL_CTL_DEL), fd[%d], errno[%s]", fd, strerror(errno));
-    }
-
-    close(fd);
-    if (fd == joyServer.lfd) {
-        bzero(&joyServer, sizeof(joyServer));
-    } else {
-        if (0 != joynetDelConnectNode(&joyServer.cpool, fd)) {
-            debug_msg("error: fail to del node, fd[%d].", fd);
-        }
-    }
-
-    return 0;
-}
-
 int joyServerProcRecvData()
 {
+    int totallen = 0;
     struct epoll_event events[kEpollMaxFDs];
     int efdcnt = epoll_wait(joyServer.efd, events, kEpollMaxFDs, kJoyServerEpollTimeOut);
     if (efdcnt < 0) {
         if (EINTR == errno) {
             return 0;
         } else {
+            // close all fd
+            joyServerCloseTcp();
             debug_msg("error: errno[%s] when epoll.", strerror(errno));
             return -1;
         }
@@ -127,14 +138,14 @@ int joyServerProcRecvData()
                 ev.events = EPOLLIN;
                 if (epoll_ctl(joyServer.efd, EPOLL_CTL_ADD, connfd, &ev)) {
                     debug_msg("fail to epoll_ctl(EPOLL_CTL_ADD), errno[%s].", strerror(errno));
-                    joyServerCloseTcp(connfd);
+                    joyServerCloseTcp_(connfd);
                     continue;
                 }
                 joynetSetSendBufSize(connfd, kJoyServerSendBufSize);
                 joynetSetRecvBufSize(connfd, kJoyServerRecvBufSize);
                 int insertpos = joynetInsertConnectNode(&joyServer.cpool, connfd);
                 if (insertpos < 0) {
-                    joyServerCloseTcp(connfd);
+                    joyServerCloseTcp_(connfd);
                     continue;
                 }
                 struct JoyConnectNode *node = joyServer.cpool.node + insertpos;
@@ -143,20 +154,21 @@ int joyServerProcRecvData()
                 int infd = events[i].data.fd;
                 int nodepos = joynetGetConnectNodePosByFD(&joyServer.cpool, infd);
                 if (nodepos < 0) {
-                    joyServerCloseTcp(infd);
+                    joyServerCloseTcp_(infd);
                     continue;
                 }
                 struct JoyConnectNode *node = joyServer.cpool.node + nodepos;
                 int rlen = joynetRecvBuf(node);
                 if (rlen < 0) {
-                    joyServerCloseTcp(infd);
+                    joyServerCloseTcp_(infd);
                     continue;
                 }
+                totallen += rlen;
             }
         }
     }
 
-    return 0;
+    return totallen;
 }
 
 int joyServerRecvData(joyRecvCallBack recvCallBack)
@@ -168,7 +180,7 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
             struct JoynetHead pkghead;
             if (0 != joynetReadRecvBuf(node, (char *)(&pkghead), sizeof(struct JoynetHead))) {
                 debug_msg("error: fail to read buf.");
-                joyServerCloseTcp(node->cfd);
+                joyServerCloseTcp_(node->cfd);
                 continue;
             }
             if (kJoynetMsgTypeShake == pkghead.msgtype) {
@@ -179,7 +191,7 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
                     debug_msg("error: invalid shake pkg.");
                     if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                         debug_msg("error: fail to leave recv queue.");
-                        joyServerCloseTcp(node->cfd);
+                        joyServerCloseTcp_(node->cfd);
                     }
                 }
             } else if (kJoynetMsgTypeMsg == pkghead.msgtype) {
@@ -189,11 +201,11 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
                         char *body = (char *)malloc(pkghead.bodylen);
                         if (NULL == body) {
                             debug_msg("error: fail to malloc, size[%d].", pkghead.bodylen);
-                            joyServerCloseTcp(node->cfd);
+                            joyServerCloseTcp_(node->cfd);
                         }
                         if (0 != joynetReadRecvBuf(node, body, pkghead.bodylen)) {
                             debug_msg("error: fail to read buf.");
-                            joyServerCloseTcp(node->cfd);
+                            joyServerCloseTcp_(node->cfd);
                         }
                         recvCallBack(body, &pkghead);
                         free(body);
@@ -202,27 +214,21 @@ int joyServerRecvData(joyRecvCallBack recvCallBack)
                         recvCallBack(body, &pkghead);
                         if (0 != joynetLeaveCycleQueue(cq, pkghead.bodylen)) {
                             debug_msg("error: fail to leave recv queue.");
-                            joyServerCloseTcp(node->cfd);
+                            joyServerCloseTcp_(node->cfd);
                         }
                     }
                 } else {
-                    debug_msg("warn: body len not enough.");
+                    debug_msg("warn: body len not enough, bodylen[%d], cnt[%d]", pkghead.bodylen, cq->cnt);
                     continue;
                 }
             } else {
                 debug_msg("error: invalid msg type[%d].", pkghead.msgtype);
-                joyServerCloseTcp(node->cfd);
+                joyServerCloseTcp_(node->cfd);
             }
         }
     }
 
-    int rv = joyServerProcRecvData();
-    if (rv < 0) {
-        debug_msg("error: fail to recv data.");
-        return -1;
-    }
-
-    return 0;
+    return joyServerProcRecvData();
 }
 
 int joyServerProcSendData()
@@ -234,7 +240,7 @@ int joyServerProcSendData()
         }
         if (joynetSendBuf(node) < 0) {
             debug_msg("error: fail to send buf.");
-            joyServerCloseTcp(node->cfd);
+            joyServerCloseTcp_(node->cfd);
             continue;
         }
     }
@@ -242,37 +248,36 @@ int joyServerProcSendData()
     return 0;
 }
 
-int joyServerSendData(const char *buf, int len, int srcid, int dstid)
+int joyServerSendData(const char *buf, int len, int procid, int srcid, int dstid)
 {
     if (NULL == buf || len <= 0) {
         debug_msg("error: invalid param, buf[%p], len[%d].", buf, len);
         return -1;
     }
 
-    int nodepos = joynetGetConnectNodePosByID(&joyServer.cpool, dstid);
+    int nodepos = joynetGetConnectNodePosByID(&joyServer.cpool, procid);
     if (nodepos < 0) {
-        debug_msg("error: fail to get node, procid[%d].", dstid);
+        debug_msg("error: fail to get node, procid[%d].", procid);
         return -1;
     }
     struct JoyConnectNode *node = joyServer.cpool.node + nodepos;
     if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", dstid);
+        debug_msg("error: send to not connected id[%d].", procid);
         return -1;
     }
 
     joyServerProcSendData();
     // 再次检查，可能在处理发送过程中发生错误，导致fd已关闭
     if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", dstid);
+        debug_msg("error: send to not connected id[%d].", procid);
         return -1;
     }
 
     struct JoynetHead pkghead = { 0 };
-    pkghead.headlen = sizeof(pkghead);
-    pkghead.bodylen = len;
-    pkghead.srcid = srcid;
-    pkghead.dstid = dstid;
-    pkghead.md5 = 0;
+    if (0 != joynetMakePkgHead(&pkghead, buf, len, srcid, dstid, 0)) {
+        debug_msg("error: fail to make pkg head.");
+        return -1;
+    }
 
     int pkglen = pkghead.headlen + pkghead.bodylen;
     int leftroom = joynetGetLeftRoom(&node->sendcq);
@@ -283,12 +288,12 @@ int joyServerSendData(const char *buf, int len, int srcid, int dstid)
 
     if (0 != joynetWriteSendBuf(node, (char *)(&pkghead), pkghead.headlen)) {
         debug_msg("error: fail to write send buf.");
-        joyServerCloseTcp(node->cfd);
+        joyServerCloseTcp_(node->cfd);
         return -1;
     }
     if (0 != joynetWriteSendBuf(node, buf, pkghead.bodylen)) {
         debug_msg("error: fail to write send buf.");
-        joyServerCloseTcp(node->cfd);
+        joyServerCloseTcp_(node->cfd);
         return -1;
     }
 
@@ -297,6 +302,7 @@ int joyServerSendData(const char *buf, int len, int srcid, int dstid)
     return 0;
 }
 
+/*
 long int totalrecvlen;
 static int serverRecvCallBack(char *buf, struct JoynetHead *pkghead)
 {
@@ -327,5 +333,11 @@ int main()
             debug_msg("total recv len[%ld].", totalrecvlen);
         }
     }
+    return 0;
+}
+*/
+
+int main()
+{
     return 0;
 }

@@ -28,7 +28,7 @@ int joynetSetTcpNoDelay(int fd)
 int joynetSetTcpKeepAlive(int fd)
 {
     int yes = 1;
-    if (-1 == setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes)) == -1) {
+    if (-1 == setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes))) {
         debug_msg("error: fail to setsockopt(SO_KEEPALIVE), errno[%s].", strerror(errno));
         return -1;
     }
@@ -38,7 +38,7 @@ int joynetSetTcpKeepAlive(int fd)
 int joynetSetAddrReuse(int fd)
 {
     int yes = 1;
-    if (-1 == setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
+    if (-1 == setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes))) {
         debug_msg("error: fail to setsockopt(SO_REUSEADDR), errno[%s].", strerror(errno));
         return -1;
     }
@@ -236,6 +236,22 @@ int joynetReadRecvBuf(struct JoyConnectNode *node, char *buf, int len)
     return 0;
 }
 
+int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int srcid, int dstid, int dstnid)
+{
+    if (NULL == pkghead || NULL == buf || len <= 0) {
+        debug_msg("error: invalid param, pkghead[%p], buf[%p], len[%d]", pkghead, buf, len);
+        return -1;
+    }
+    pkghead->headlen = sizeof(*pkghead);
+    pkghead->bodylen = len;
+    pkghead->srcid = srcid;
+    pkghead->dstid = dstid;
+    pkghead->dstnid = dstnid;
+    pkghead->md5 = 0;
+    // debug_msg("pkghead, head len[%d], body len[%d]", pkghead->headlen, pkghead->bodylen);
+    return 0;
+}
+
 int joynetGetConnectNodePosByFD(struct JoyConnectPool *cp, int cfd)
 {
     if (NULL == cp) {
@@ -250,6 +266,8 @@ int joynetGetConnectNodePosByFD(struct JoyConnectPool *cp, int cfd)
     return -1;
 }
 
+// 待扩展, 支持多个相同id
+// TODO chenhu: 当是Server端, 使用zoneid作为下标索引,提高效率O(1)
 int joynetGetConnectNodePosByID(struct JoyConnectPool *cp, int id)
 {
     if (NULL == cp) {

@@ -21,11 +21,11 @@ struct JoyServer {
 };
 
 int joyServerListen(const char *addr, int port);
-int joyServerCloseTcp(int fd);
+int joyServerCloseTcp();
 int joyServerProcRecvData();
 int joyServerRecvData(joyRecvCallBack recvCallBack);
 int joyServerProcSendData();
-int joyServerSendData(const char *buf, int len, int srcid, int dstid);
+int joyServerSendData(const char *buf, int len, int procid, int srcid, int dstid);
 
 #ifdef __cplusplus
 }
